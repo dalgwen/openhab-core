@@ -15,6 +15,7 @@ package org.openhab.core.thing.profiles;
 import org.eclipse.jdt.annotation.NonNullByDefault;
 import org.openhab.core.types.Command;
 import org.openhab.core.types.State;
+import org.openhab.core.types.Type;
 
 /**
  * A {@link StateProfile} defined the communication for channels of STATE kind.
@@ -44,4 +45,14 @@ public interface StateProfile extends Profile {
      * @param state
      */
     void onStateUpdateFromHandler(State state);
+
+    /**
+     * This method will give a profile an early chance to convert a command from an item before handling it
+     *
+     * @param command
+     * @return
+     */
+    default <T extends Type> T convertCommandFromItem(T command) {
+        return command;
+    }
 }

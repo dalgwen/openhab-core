@@ -358,6 +358,7 @@ public class CommunicationManager implements EventSubscriber, RegistryChangeList
         void handle(Profile profile, Thing thing, T type);
     }
 
+    @SuppressWarnings("unchecked")
     private <T extends Type> void handleEvent(String itemName, T type, @Nullable String source,
             Function<@Nullable String, @Nullable List<Class<? extends T>>> acceptedTypesFunction,
             ProfileAction<T> action) {
@@ -376,18 +377,25 @@ public class CommunicationManager implements EventSubscriber, RegistryChangeList
             if (thing != null) {
                 Channel channel = thing.getChannel(channelUID.getId());
                 if (channel != null) {
-                    @Nullable
-                    T convertedType = toAcceptedType(type, channel, acceptedTypesFunction, item);
-                    if (convertedType != null) {
-                        if (thing.getHandler() != null) {
-                            Profile profile = getProfile(link, item, thing);
-                            action.handle(profile, thing, convertedType);
+                    if (thing.getHandler() != null) {
+                        Profile profile = getProfile(link, item, thing);
+                        @Nullable
+                        T convertedType = type;
+                        // give a change for the profile to convert a command
+                        if (profile instanceof StateProfile && convertedType instanceof Command) {
+                            convertedType = (T) ((StateProfile) profile)
+                                    .convertCommandFromItem(((Command) convertedType));
                         }
-                    } else {
-                        logger.debug(
-                                "Received event '{}' ({}) could not be converted to any type accepted by item '{}' ({})",
-                                type, type.getClass().getSimpleName(), itemName, item.getType());
+                        convertedType = toAcceptedType(convertedType, channel, acceptedTypesFunction, item);
+                        if (convertedType != null) {
+                            action.handle(profile, thing, convertedType);
+                        } else {
+                            logger.debug(
+                                    "Received event '{}' ({}) could not be converted to any type accepted by item '{}' ({})",
+                                    type, type.getClass().getSimpleName(), itemName, item.getType());
+                        }
                     }
+
                 } else {
                     logger.debug("Received  event '{}' for non-existing channel '{}', not forwarding it to the handler",
                             type, channelUID);
