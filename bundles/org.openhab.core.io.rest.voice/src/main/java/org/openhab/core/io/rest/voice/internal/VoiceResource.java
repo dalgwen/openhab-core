@@ -41,7 +41,7 @@ import org.openhab.core.io.rest.LocaleService;
 import org.openhab.core.io.rest.RESTConstants;
 import org.openhab.core.io.rest.RESTResource;
 import org.openhab.core.library.types.PercentType;
-import org.openhab.core.voice.KSService;
+import org.openhab.core.voice.DialogTriggerService;
 import org.openhab.core.voice.STTService;
 import org.openhab.core.voice.TTSService;
 import org.openhab.core.voice.Voice;
@@ -251,7 +251,7 @@ public class VoiceResource implements RESTResource {
     public Response startDialog(
             @HeaderParam(HttpHeaders.ACCEPT_LANGUAGE) @Parameter(description = "language") @Nullable String language,
             @QueryParam("sourceId") @Parameter(description = "source ID") @Nullable String sourceId,
-            @QueryParam("ksId") @Parameter(description = "keywork spotter ID") @Nullable String ksId,
+            @QueryParam("dtsId") @Parameter(description = "Dialog trigger ID") @Nullable String dtsId,
             @QueryParam("sttId") @Parameter(description = "Speech-to-Text ID") @Nullable String sttId,
             @QueryParam("ttsId") @Parameter(description = "Text-to-Speech ID") @Nullable String ttsId,
             @QueryParam("voiceId") @Parameter(description = "voice ID") @Nullable String voiceId,
@@ -267,12 +267,12 @@ public class VoiceResource implements RESTResource {
             }
             dialogContextBuilder.withSource(source);
         }
-        if (ksId != null) {
-            KSService ks = voiceManager.getKS(ksId);
-            if (ks == null) {
-                return JSONResponse.createErrorResponse(Status.NOT_FOUND, "Keyword spotter not found");
+        if (dtsId != null) {
+            DialogTriggerService dts = voiceManager.getDTS(dtsId);
+            if (dts == null) {
+                return JSONResponse.createErrorResponse(Status.NOT_FOUND, "Dialog trigger service not found");
             }
-            dialogContextBuilder.withKS(ks);
+            dialogContextBuilder.withDTS(dts);
         }
         if (sttId != null) {
             STTService stt = voiceManager.getSTT(sttId);

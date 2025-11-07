@@ -19,12 +19,12 @@ import org.eclipse.jdt.annotation.NonNullByDefault;
 import org.eclipse.jdt.annotation.Nullable;
 import org.openhab.core.audio.AudioFormat;
 import org.openhab.core.audio.AudioStream;
-import org.openhab.core.voice.KSErrorEvent;
-import org.openhab.core.voice.KSException;
-import org.openhab.core.voice.KSListener;
+import org.openhab.core.voice.DialogTriggerErrorEvent;
+import org.openhab.core.voice.DialogTriggerException;
+import org.openhab.core.voice.DialogTriggerListener;
+import org.openhab.core.voice.DialogTriggeredEvent;
 import org.openhab.core.voice.KSService;
-import org.openhab.core.voice.KSServiceHandle;
-import org.openhab.core.voice.KSpottedEvent;
+import org.openhab.core.voice.DialogTriggerServiceHandle;
 
 /**
  * A {@link KSService} stub used for the tests.
@@ -33,7 +33,7 @@ import org.openhab.core.voice.KSpottedEvent;
  * @author Velin Yordanov - migrated from groovy to java
  */
 @NonNullByDefault
-public class KSServiceStub implements KSService {
+public class KSServiceStub extends KSService {
 
     private static final Set<AudioFormat> SUPPORTED_FORMATS = Set.of(AudioFormat.MP3, AudioFormat.WAV);
     private static final Set<Locale> SUPPORTED_LOCALES = Set.of(Locale.ENGLISH);
@@ -70,18 +70,18 @@ public class KSServiceStub implements KSService {
     }
 
     @Override
-    public KSServiceHandle spot(KSListener ksListener, AudioStream audioStream, Locale locale, String keyword)
-            throws KSException {
+    public DialogTriggerServiceHandle spot(DialogTriggerListener dialogTriggerListener, AudioStream audioStream, Locale locale, String keyword)
+            throws DialogTriggerException {
         if (exceptionExpected) {
-            throw new KSException(EXCEPTION_MESSAGE);
+            throw new DialogTriggerException(EXCEPTION_MESSAGE);
         } else {
             if (errorExpected) {
-                ksListener.ksEventReceived(new KSErrorEvent(ERROR_MESSAGE));
+                dialogTriggerListener.dialogTriggerEventReceived(new DialogTriggerErrorEvent(ERROR_MESSAGE));
             } else {
                 isWordSpotted = true;
-                ksListener.ksEventReceived(new KSpottedEvent());
+                dialogTriggerListener.dialogTriggerEventReceived(new DialogTriggeredEvent());
             }
-            return new KSServiceHandle() {
+            return new DialogTriggerServiceHandle() {
                 @Override
                 public void abort() {
                     aborted = true;

@@ -27,6 +27,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
 import java.util.WeakHashMap;
 import java.util.concurrent.CompletableFuture;
@@ -59,6 +60,7 @@ import org.openhab.core.storage.Storage;
 import org.openhab.core.storage.StorageService;
 import org.openhab.core.voice.DialogContext;
 import org.openhab.core.voice.DialogRegistration;
+import org.openhab.core.voice.DialogTriggerService;
 import org.openhab.core.voice.KSService;
 import org.openhab.core.voice.RecognitionStartEvent;
 import org.openhab.core.voice.RecognitionStopEvent;
@@ -115,7 +117,7 @@ public class VoiceManagerImpl implements VoiceManager, ConfigOptionProvider, Dia
     private static final String CONFIG_LISTENING_ITEM = "listeningItem";
     private static final String CONFIG_LISTENING_MELODY = "listeningMelody";
     private static final String CONFIG_DEFAULT_HLI = "defaultHLI";
-    private static final String CONFIG_DEFAULT_KS = "defaultKS";
+    private static final String CONFIG_DEFAULT_DTS = "defaultDTS";
     private static final String CONFIG_DEFAULT_STT = "defaultSTT";
     private static final String CONFIG_DEFAULT_TTS = "defaultTTS";
     private static final String CONFIG_DEFAULT_VOICE = "defaultVoice";
@@ -125,7 +127,7 @@ public class VoiceManagerImpl implements VoiceManager, ConfigOptionProvider, Dia
     private final ScheduledExecutorService scheduledExecutorService = ThreadPoolManager
             .getScheduledPool(ThreadPoolManager.THREAD_POOL_NAME_COMMON);
     // service maps
-    private final Map<String, KSService> ksServices = new HashMap<>();
+    private final Map<String, DialogTriggerService> dtServices = new HashMap<>();
     private final Map<String, STTService> sttServices = new HashMap<>();
     private final Map<String, TTSService> ttsServices = new HashMap<>();
     private final Map<String, HumanLanguageInterpreter> humanLanguageInterpreters = new HashMap<>();
@@ -148,7 +150,7 @@ public class VoiceManagerImpl implements VoiceManager, ConfigOptionProvider, Dia
     private @Nullable String listeningMelody;
     private @Nullable String defaultTTS;
     private @Nullable String defaultSTT;
-    private @Nullable String defaultKS;
+    private @Nullable String defaultDTS;
     private @Nullable String defaultHLI;
     private @Nullable String defaultVoice;
     private final Map<String, String> defaultVoices = new HashMap<>();
@@ -199,7 +201,7 @@ public class VoiceManagerImpl implements VoiceManager, ConfigOptionProvider, Dia
                     : null;
             this.defaultTTS = config.containsKey(CONFIG_DEFAULT_TTS) ? config.get(CONFIG_DEFAULT_TTS).toString() : null;
             this.defaultSTT = config.containsKey(CONFIG_DEFAULT_STT) ? config.get(CONFIG_DEFAULT_STT).toString() : null;
-            this.defaultKS = config.containsKey(CONFIG_DEFAULT_KS) ? config.get(CONFIG_DEFAULT_KS).toString() : null;
+            this.defaultDTS = config.containsKey(CONFIG_DEFAULT_DTS) ? config.get(CONFIG_DEFAULT_DTS).toString() : null;
             this.defaultHLI = config.containsKey(CONFIG_DEFAULT_HLI) ? config.get(CONFIG_DEFAULT_HLI).toString() : null;
             this.defaultVoice = config.containsKey(CONFIG_DEFAULT_VOICE) ? config.get(CONFIG_DEFAULT_VOICE).toString()
                     : null;
@@ -275,14 +277,14 @@ public class VoiceManagerImpl implements VoiceManager, ConfigOptionProvider, Dia
                 throw new TTSException("Unable to find the audio sink " + sinkId);
             }
 
-            AudioFormat ttsAudioFormat = getBestMatch(ttsSupportedFormats, sink.getSupportedFormats());
+            AudioFormat ttsAudioFormat = VoiceManager.getBestMatch(ttsSupportedFormats, sink.getSupportedFormats());
             if (ttsAudioFormat == null) {
                 throw new TTSException("No compatible audio format found for TTS '" + tts.getId() + "' and sink '"
                         + sink.getId() + "'");
             }
 
             AudioStream audioStream = tts.synthesize(text, voice, ttsAudioFormat);
-            if (!sink.getSupportedStreams().stream().anyMatch(clazz -> clazz.isInstance(audioStream))) {
+            if (sink.getSupportedStreams().stream().noneMatch(clazz -> clazz.isInstance(audioStream))) {
                 throw new TTSException(
                         "Failed playing audio stream '" + audioStream + "' as audio sink doesn't support it");
             }
@@ -312,7 +314,7 @@ public class VoiceManagerImpl implements VoiceManager, ConfigOptionProvider, Dia
             logger.warn("Speech-to-text service '{}' not available", sttId != null ? sttId : "default");
             return "";
         }
-        var sttFormat = VoiceManagerImpl.getBestMatch(audioSource.getSupportedFormats(),
+        var sttFormat = VoiceManager.getBestMatch(audioSource.getSupportedFormats(),
                 sttService.getSupportedFormats());
         if (sttFormat == null) {
             logger.warn("No compatible audio format found for stt '{}' and the provided audio stream",
@@ -336,7 +338,7 @@ public class VoiceManagerImpl implements VoiceManager, ConfigOptionProvider, Dia
             logger.warn("Speech-to-text service '{}' not available", sttId != null ? sttId : "default");
             return "";
         }
-        var sttFormat = VoiceManagerImpl.getBestMatch(Set.of(audioStream.getFormat()),
+        var sttFormat = VoiceManager.getBestMatch(Set.of(audioStream.getFormat()),
                 sttService.getSupportedFormats());
         if (sttFormat == null) {
             logger.warn("No compatible audio format found for stt '{}' and the provided audio stream",
@@ -352,19 +354,24 @@ public class VoiceManagerImpl implements VoiceManager, ConfigOptionProvider, Dia
         STTServiceHandle sttServiceHandle;
         try {
             sttServiceHandle = sttService.recognize(sttEvent -> {
-                if (sttEvent instanceof SpeechRecognitionEvent sre) {
-                    logger.debug("SpeechRecognitionEvent event received");
-                    String transcript = sre.getTranscript();
-                    logger.debug("Text recognized: {}", transcript);
-                    transcriptionResult.complete(transcript);
-                } else if (sttEvent instanceof RecognitionStartEvent) {
-                    logger.debug("RecognitionStartEvent event received");
-                } else if (sttEvent instanceof RecognitionStopEvent) {
-                    logger.debug("RecognitionStopEvent event received");
-                } else if (sttEvent instanceof SpeechRecognitionErrorEvent sre) {
-                    logger.debug("SpeechRecognitionErrorEvent event received");
-                    transcriptionResult.completeExceptionally(
-                            new IOException("SpeechRecognitionErrorEvent emitted: " + sre.getMessage()));
+                switch (sttEvent) {
+                    case SpeechRecognitionEvent sre -> {
+                        logger.debug("SpeechRecognitionEvent event received");
+                        String transcript = sre.getTranscript();
+                        logger.debug("Text recognized: {}", transcript);
+                        transcriptionResult.complete(transcript);
+                    }
+                    case RecognitionStartEvent ignored ->
+                            logger.debug("RecognitionStartEvent event received");
+                    case RecognitionStopEvent ignored ->
+                            logger.debug("RecognitionStopEvent event received");
+                    case SpeechRecognitionErrorEvent sre -> {
+                        logger.debug("SpeechRecognitionErrorEvent event received");
+                        transcriptionResult.completeExceptionally(
+                                new IOException("SpeechRecognitionErrorEvent emitted: " + sre.getMessage()));
+                    }
+                    default -> {
+                    }
                 }
             }, audioStream, nullSafeLocale, new HashSet<>());
         } catch (STTException e) {
@@ -456,97 +463,6 @@ public class VoiceManagerImpl implements VoiceManager, ConfigOptionProvider, Dia
         return null;
     }
 
-    public static @Nullable AudioFormat getPreferredFormat(Set<AudioFormat> audioFormats) {
-        // Return the first concrete AudioFormat found
-        for (AudioFormat currentAudioFormat : audioFormats) {
-            // Check if currentAudioFormat is abstract
-            if ((null == currentAudioFormat.getCodec()) || (null == currentAudioFormat.getContainer())
-                    || (null == currentAudioFormat.isBigEndian()) || (null == currentAudioFormat.getBitDepth())) {
-                continue;
-            }
-            // Prefer WAVE container
-            if ((null == currentAudioFormat.getBitRate()) || (null == currentAudioFormat.getFrequency())
-                    || !AudioFormat.CONTAINER_WAVE.equals(currentAudioFormat.getContainer())) {
-                continue;
-            }
-
-            // As currentAudioFormat is concrete, use it
-            return currentAudioFormat;
-        }
-
-        // There's no concrete AudioFormat so we must create one
-        for (AudioFormat currentAudioFormat : audioFormats) {
-            // Define AudioFormat to return
-            AudioFormat format = currentAudioFormat;
-
-            // Not all Codecs and containers can be supported
-            // Prefer WAVE container
-            if ((null == format.getCodec()) || (null == format.getContainer())
-                    || !AudioFormat.CONTAINER_WAVE.equals(format.getContainer())) {
-                continue;
-            }
-
-            // If required set BigEndian, BitDepth, BitRate, and Frequency to default values
-            if (null == format.isBigEndian()) {
-                format = new AudioFormat(format.getContainer(), format.getCodec(), Boolean.TRUE, format.getBitDepth(),
-                        format.getBitRate(), format.getFrequency());
-            }
-            if (null == format.getBitDepth() || null == format.getBitRate() || null == format.getFrequency()) {
-                // Define default values
-                int defaultBitDepth = 16;
-                long defaultFrequency = 44100;
-
-                // Obtain current values
-                Integer bitRate = format.getBitRate();
-                Long frequency = format.getFrequency();
-                Integer bitDepth = format.getBitDepth();
-
-                // These values must be interdependent (bitRate = bitDepth * frequency)
-                if (null == bitRate) {
-                    if (null == bitDepth) {
-                        bitDepth = Integer.valueOf(defaultBitDepth);
-                    }
-                    if (null == frequency) {
-                        frequency = Long.valueOf(defaultFrequency);
-                    }
-                    bitRate = Integer.valueOf(bitDepth.intValue() * frequency.intValue());
-                } else if (null == bitDepth) {
-                    if (null == frequency) {
-                        frequency = Long.valueOf(defaultFrequency);
-                    }
-                    bitDepth = Integer.valueOf(bitRate.intValue() / frequency.intValue());
-                } else if (null == frequency) {
-                    frequency = Long.valueOf(bitRate.longValue() / bitDepth.longValue());
-                }
-
-                format = new AudioFormat(format.getContainer(), format.getCodec(), format.isBigEndian(), bitDepth,
-                        bitRate, frequency);
-            }
-
-            // Return preferred AudioFormat
-            return format;
-        }
-
-        // Return null indicating failure
-        return null;
-    }
-
-    public static @Nullable AudioFormat getBestMatch(Set<AudioFormat> inputs, Set<AudioFormat> outputs) {
-        AudioFormat preferredFormat = getPreferredFormat(inputs);
-        for (AudioFormat output : outputs) {
-            if (output.isCompatible(preferredFormat)) {
-                return preferredFormat;
-            } else {
-                for (AudioFormat input : inputs) {
-                    if (output.isCompatible(input)) {
-                        return input;
-                    }
-                }
-            }
-        }
-        return null;
-    }
-
     @Override
     public @Nullable Voice getPreferredVoice(Set<Voice> voices) {
         // Express preferences with a Language Priority List
@@ -588,7 +504,7 @@ public class VoiceManagerImpl implements VoiceManager, ConfigOptionProvider, Dia
         return new DialogContext.Builder(keyword, localeProvider.getLocale()) //
                 .withSink(audioManager.getSink()) //
                 .withSource(audioManager.getSource()) //
-                .withKS(this.getKS()) //
+                .withDTS(this.getDTS()) //
                 .withSTT(this.getSTT()) //
                 .withTTS(this.getTTS()) //
                 .withHLI(this.getHLI()) //
@@ -609,17 +525,22 @@ public class VoiceManagerImpl implements VoiceManager, ConfigOptionProvider, Dia
 
     @Override
     public void startDialog(DialogContext context) throws IllegalStateException {
-        var ksService = context.ks();
+        var dtsService = context.dts();
         var ksKeyword = context.keyword();
-        if (ksService == null || ksKeyword == null) {
+        if (dtsService.isEmpty() || ksKeyword == null) {
             throw new IllegalStateException(
-                    "Invalid dialog context for persistent dialog: missing keyword spot configuration");
+                    "Invalid dialog context for persistent dialog: missing dialog trigger configuration");
         }
         Bundle b = bundle;
         if (b == null) {
             throw new IllegalStateException("Bundle is not (yet?) set.");
         }
-        if (!checkLocales(ksService.getSupportedLocales(), context.locale())
+        boolean ksLocalCheck = switch(dtsService) {
+            case KSService ks -> checkLocales(ks.getSupportedLocales(), context.locale());
+            default -> true;
+        };
+
+        if (!ksLocalCheck
                 || !checkLocales(context.stt().getSupportedLocales(), context.locale()) || !context.hlis().stream()
                         .allMatch(interpreter -> checkLocales(interpreter.getSupportedLocales(), context.locale()))) {
             throw new IllegalStateException("Cannot start dialog as provided locale is not supported by all services.");
@@ -777,16 +698,16 @@ public class VoiceManagerImpl implements VoiceManager, ConfigOptionProvider, Dia
     }
 
     @Reference(cardinality = ReferenceCardinality.MULTIPLE, policy = ReferencePolicy.DYNAMIC)
-    protected void addKSService(KSService ksService) {
-        this.ksServices.put(ksService.getId(), ksService);
+    protected void addDTService(DialogTriggerService dtService) {
+        this.dtServices.put(dtService.getId(), dtService);
         scheduleDialogRegistrations();
     }
 
-    protected void removeKSService(KSService ksService) {
-        this.ksServices.remove(ksService.getId());
+    protected void removeDTService(DialogTriggerService dtService) {
+        this.dtServices.remove(dtService.getId());
         stopDialogs(dialog -> {
-            var ks = dialog.dialogContext.ks();
-            return ks != null && ks.getId().equals(ksService.getId());
+            var ks = dialog.dialogContext.dts();
+            return ks.stream().map(DialogTriggerService::getId).toList().contains(dtService.getId());
         });
     }
 
@@ -881,29 +802,29 @@ public class VoiceManagerImpl implements VoiceManager, ConfigOptionProvider, Dia
     }
 
     @Override
-    public @Nullable KSService getKS() {
-        KSService ks = null;
-        if (defaultKS != null) {
-            ks = ksServices.get(defaultKS);
-            if (ks == null) {
-                logger.warn("Default KS service '{}' not available!", defaultKS);
+    public @Nullable DialogTriggerService getDTS() {
+        DialogTriggerService dts = null;
+        if (defaultDTS != null) {
+            dts = dtServices.get(defaultDTS);
+            if (dts == null) {
+                logger.warn("Default KS service '{}' not available!", defaultDTS);
             }
-        } else if (!ksServices.isEmpty()) {
-            ks = ksServices.values().iterator().next();
+        } else if (!dtServices.isEmpty()) {
+            dts = dtServices.values().iterator().next();
         } else {
             logger.debug("No KS service available!");
         }
-        return ks;
+        return dts;
     }
 
     @Override
-    public @Nullable KSService getKS(@Nullable String id) {
-        return id == null ? null : ksServices.get(id);
+    public @Nullable DialogTriggerService getDTS(@Nullable String id) {
+        return id == null ? null : dtServices.get(id);
     }
 
     @Override
-    public Collection<KSService> getKSs() {
-        return new HashSet<>(ksServices.values());
+    public Collection<DialogTriggerService> getDTSs() {
+        return new HashSet<>(dtServices.values());
     }
 
     @Override
@@ -949,6 +870,20 @@ public class VoiceManagerImpl implements VoiceManager, ConfigOptionProvider, Dia
     @Override
     public Collection<HumanLanguageInterpreter> getHLIs() {
         return new HashSet<>(humanLanguageInterpreters.values());
+    }
+
+    @Override
+    public List<DialogTriggerService> getDTSsByIds(List<String> ids) {
+        List<DialogTriggerService> DTSs = new ArrayList<>();
+        for (String id : ids) {
+            DialogTriggerService dts = dtServices.get(id);
+            if (dts == null) {
+                logger.warn("Dialog trigger service '{}' not available!", id);
+            } else {
+                DTSs.add(dts);
+            }
+        }
+        return DTSs;
     }
 
     @Override
@@ -1000,8 +935,8 @@ public class VoiceManagerImpl implements VoiceManager, ConfigOptionProvider, Dia
                     return humanLanguageInterpreters.values().stream()
                             .sorted((hli1, hli2) -> hli1.getLabel(locale).compareToIgnoreCase(hli2.getLabel(locale)))
                             .map(hli -> new ParameterOption(hli.getId(), hli.getLabel(locale))).toList();
-                case CONFIG_DEFAULT_KS:
-                    return ksServices.values().stream()
+                case CONFIG_DEFAULT_DTS:
+                    return dtServices.values().stream()
                             .sorted((ks1, ks2) -> ks1.getLabel(locale).compareToIgnoreCase(ks2.getLabel(locale)))
                             .map(ks -> new ParameterOption(ks.getId(), ks.getLabel(locale))).toList();
                 case CONFIG_DEFAULT_STT:
@@ -1017,7 +952,7 @@ public class VoiceManagerImpl implements VoiceManager, ConfigOptionProvider, Dia
                     return getAllVoicesSorted(nullSafeLocale)
                             .stream().filter(v -> getTTS(v) != null).map(
                                     v -> new ParameterOption(v.getUID(),
-                                            String.format("%s - %s - %s", getTTS(v).getLabel(nullSafeLocale),
+                                            String.format("%s - %s - %s", Optional.ofNullable(getTTS(v)).map((tts) -> tts.getLabel(nullSafeLocale)).orElse(""),
                                                     v.getLocale().getDisplayName(nullSafeLocale), v.getLabel())))
                             .toList();
             }
@@ -1039,7 +974,7 @@ public class VoiceManagerImpl implements VoiceManager, ConfigOptionProvider, Dia
 
     /**
      * In order to reduce the number of dialog registration builds
-     * this method schedules a call to {@link #buildDialogRegistrations() buildDialogRegistrations} in five seconds
+     * this method schedules a call to {@link #startAllEnabledDialogRegistrations() buildDialogRegistrations} in five seconds
      * and cancel the previous scheduled call if any.
      */
     private void scheduleDialogRegistrations() {
@@ -1047,7 +982,7 @@ public class VoiceManagerImpl implements VoiceManager, ConfigOptionProvider, Dia
         if (job != null) {
             job.cancel(false);
         }
-        dialogRegistrationFuture = scheduledExecutorService.schedule(this::buildDialogRegistrations, 5,
+        dialogRegistrationFuture = scheduledExecutorService.schedule(this::startAllEnabledDialogRegistrations, 5,
                 TimeUnit.SECONDS);
     }
 
@@ -1056,15 +991,15 @@ public class VoiceManagerImpl implements VoiceManager, ConfigOptionProvider, Dia
      * It's only called from {@link #scheduleDialogRegistrations() scheduleDialogRegistrations} in order to
      * reduce the number of executions.
      */
-    private void buildDialogRegistrations() {
+    private void startAllEnabledDialogRegistrations() {
         synchronized (dialogRegistrationStorage) {
             dialogRegistrationStorage.getValues().forEach(dr -> {
-                if (dr != null && !dialogProcessors.containsKey(dr.sourceId)) {
+                if (dr != null && dr.enabled && !dialogProcessors.containsKey(dr.sourceId)) {
                     try {
                         startDialog(getDialogContextBuilder() //
                                 .withSink(audioManager.getSink(dr.sinkId)) //
                                 .withSource(audioManager.getSource(dr.sourceId)) //
-                                .withKS(getKS(dr.ksId)) //
+                                .withDTS(getDTSsByIds(dr.dtsId)) //
                                 .withKeyword(dr.keyword) //
                                 .withSTT(getSTT(dr.sttId)) //
                                 .withTTS(getTTS(dr.ttsId)) //
@@ -1075,6 +1010,7 @@ public class VoiceManagerImpl implements VoiceManager, ConfigOptionProvider, Dia
                                 .withLocationItem(dr.locationItem) //
                                 .withListeningItem(dr.listeningItem) //
                                 .withMelody(dr.listeningMelody) //
+                                .withEnabled(dr.enabled)
                                 .build());
                     } catch (IllegalStateException e) {
                         logger.debug("Unable to start dialog registration: {}", e.getMessage());

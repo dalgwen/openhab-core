@@ -126,8 +126,8 @@ public class StandardInterpreterTest {
         var computerItem2 = new SwitchItem("computer2");
         computerItem2.setLabel("Computer");
         when(locationItem.getMembers()).thenReturn(Set.of(computerItem));
-        var dialogContext = new DialogContext(null, null, sttService, ttsService, null, List.of(), audioSource,
-                audioSink, Locale.ENGLISH, "", locationItem.getName(), null, null);
+        var dialogContext = new DialogContext(Set.of(), null, sttService, ttsService, null, List.of(), audioSource,
+                audioSink, Locale.ENGLISH, "", locationItem.getName(), null, null, true);
         List<Item> items = List.of(computerItem2, locationItem, computerItem);
         when(itemRegistryMock.getItems()).thenReturn(items);
         assertEquals(OK_RESPONSE, standardInterpreter.interpret(Locale.ENGLISH, "turn off computer", dialogContext));

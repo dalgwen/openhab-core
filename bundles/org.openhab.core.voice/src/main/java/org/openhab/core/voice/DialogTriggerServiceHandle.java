@@ -15,10 +15,14 @@ package org.openhab.core.voice;
 import org.eclipse.jdt.annotation.NonNullByDefault;
 
 /**
- * A tagging interface for keyword spotting events.
+ * A handle to a {@link DialogTriggerService}
  *
  * @author Kelly Davis - Initial contribution
  */
 @NonNullByDefault
-public interface KSEvent {
+public interface DialogTriggerServiceHandle {
+    /**
+     * Aborts Dialog trigger spotting in the associated {@link DialogTriggerService}
+     */
+    void abort();
 }

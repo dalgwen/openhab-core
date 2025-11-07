@@ -13,21 +13,25 @@
 package org.openhab.core.model.script.actions;
 
 import java.math.BigDecimal;
+import java.util.Collections;
 import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
+import java.util.Optional;
 
 import org.eclipse.jdt.annotation.NonNullByDefault;
 import org.eclipse.jdt.annotation.Nullable;
+import org.openhab.core.audio.AudioManager;
 import org.openhab.core.audio.AudioSink;
 import org.openhab.core.audio.AudioSource;
 import org.openhab.core.library.types.PercentType;
 import org.openhab.core.model.script.engine.action.ActionDoc;
 import org.openhab.core.model.script.engine.action.ParamDoc;
 import org.openhab.core.model.script.internal.engine.action.VoiceActionService;
-import org.openhab.core.voice.KSService;
+import org.openhab.core.voice.DialogTriggerService;
 import org.openhab.core.voice.STTService;
 import org.openhab.core.voice.TTSService;
+import org.openhab.core.voice.VoiceManager;
 import org.openhab.core.voice.text.HumanLanguageInterpreter;
 import org.openhab.core.voice.text.InterpretationException;
 import org.slf4j.Logger;
@@ -236,7 +240,7 @@ public class Voice {
     /**
      * Starts dialog processing for a given audio source.
      *
-     * @param ks the keyword spotting service to use or null to use the default service
+     * @param dts the keyword spotting service to use or null to use the default service
      * @param stt the speech-to-text service to use or null to use the default service
      * @param tts the text-to-speech service to use or null to use the default service
      * @param voice the voice to use or null to use the default voice or any voice provided by the text-to-speech
@@ -250,7 +254,7 @@ public class Voice {
      * @param listeningItem the item to switch ON while listening to a question
      */
     @ActionDoc(text = "starts dialog processing for a given audio source")
-    public static void startDialog(@ParamDoc(name = "keyword spotting service") @Nullable String ks,
+    public static void startDialog(@ParamDoc(name = "Dialog trigger service") @Nullable String dts,
             @ParamDoc(name = "speech-to-text service") @Nullable String stt,
             @ParamDoc(name = "text-to-speech service") @Nullable String tts,
             @ParamDoc(name = "voice") @Nullable String voice,
@@ -267,13 +271,13 @@ public class Voice {
             }
             dialogContextBuilder.withSource(audioSource);
         }
-        if (ks != null) {
-            KSService ksService = VoiceActionService.voiceManager.getKS(ks);
-            if (ksService == null) {
-                logger.warn("Failed starting dialog processing: keyword spotting service '{}' not found", ks);
+        if (dts != null) {
+            DialogTriggerService dtsService = VoiceActionService.voiceManager.getDTS(dts);
+            if (dtsService == null) {
+                logger.warn("Failed starting dialog processing: dialog trigger spotting service '{}' not found", dts);
                 return;
             }
-            dialogContextBuilder.withKS(ksService);
+            dialogContextBuilder.withDTS(dtsService);
         }
         if (keyword != null) {
             dialogContextBuilder.withKeyword(keyword);
@@ -311,7 +315,8 @@ public class Voice {
             dialogContextBuilder.withHLIs(hliServices);
         }
         if (sink != null) {
-            AudioSink audioSink = VoiceActionService.audioManager.getSink(sink);
+            AudioManager audioManager = VoiceActionService.audioManager;
+            AudioSink audioSink = Optional.ofNullable(audioManager).map(AudioManager::getSink).orElse(null);
             if (audioSink == null) {
                 logger.warn("Failed starting dialog processing: audio sink '{}' not found", sink);
                 return;
@@ -349,13 +354,16 @@ public class Voice {
         try {
             AudioSource audioSource = null;
             if (source != null) {
-                audioSource = VoiceActionService.audioManager.getSource(source);
+                audioSource = Optional.ofNullable(VoiceActionService.audioManager).map((am) -> am.getSource(source)).orElse(null);
                 if (audioSource == null) {
                     logger.warn("Failed stopping dialog processing: audio source '{}' not found", source);
                     return;
                 }
             }
-            VoiceActionService.voiceManager.stopDialog(audioSource);
+            VoiceManager voiceManager = VoiceActionService.voiceManager;
+            if (voiceManager != null) {
+                voiceManager.stopDialog(audioSource);
+            }
         } catch (IllegalStateException e) {
             logger.warn("Failed stopping dialog processing: {}", e.getMessage());
         }
@@ -397,9 +405,16 @@ public class Voice {
             @ParamDoc(name = "locale") @Nullable String locale,
             @ParamDoc(name = "listening item") @Nullable String listeningItem) {
         try {
-            var dialogContextBuilder = VoiceActionService.voiceManager.getDialogContextBuilder();
+
+            VoiceManager voiceManager = VoiceActionService.voiceManager;
+            AudioManager audioManager = VoiceActionService.audioManager;
+            if (voiceManager == null || audioManager == null) {
+                logger.warn("Failed executing simple dialog: voice manager or audio manager not found");
+                return;
+            }
+            var dialogContextBuilder = voiceManager.getDialogContextBuilder();
             if (source != null) {
-                AudioSource audioSource = VoiceActionService.audioManager.getSource(source);
+                AudioSource audioSource = audioManager.getSource(source);
                 if (audioSource == null) {
                     logger.warn("Failed executing simple dialog: audio source '{}' not found", source);
                     return;
@@ -407,7 +422,7 @@ public class Voice {
                 dialogContextBuilder.withSource(audioSource);
             }
             if (stt != null) {
-                STTService sttService = VoiceActionService.voiceManager.getSTT(stt);
+                STTService sttService = voiceManager.getSTT(stt);
                 if (sttService == null) {
                     logger.warn("Failed executing simple dialog: speech-to-text service '{}' not found", stt);
                     return;
@@ -415,7 +430,7 @@ public class Voice {
                 dialogContextBuilder.withSTT(sttService);
             }
             if (tts != null) {
-                TTSService ttsService = VoiceActionService.voiceManager.getTTS(tts);
+                TTSService ttsService = voiceManager.getTTS(tts);
                 if (ttsService == null) {
                     logger.warn("Failed executing simple dialog: text-to-speech service '{}' not found", tts);
                     return;
@@ -431,7 +446,7 @@ public class Voice {
                 dialogContextBuilder.withVoice(prefVoice);
             }
             if (interpreters != null) {
-                List<HumanLanguageInterpreter> hliServices = VoiceActionService.voiceManager.getHLIsByIds(interpreters);
+                List<HumanLanguageInterpreter> hliServices = voiceManager.getHLIsByIds(interpreters);
                 if (hliServices.isEmpty()) {
                     logger.warn("Failed executing simple dialog: interpreters '{}' not found", interpreters);
                     return;
@@ -439,7 +454,7 @@ public class Voice {
                 dialogContextBuilder.withHLIs(hliServices);
             }
             if (sink != null) {
-                AudioSink audioSink = VoiceActionService.audioManager.getSink(sink);
+                AudioSink audioSink = audioManager.getSink(sink);
                 if (audioSink == null) {
                     logger.warn("Failed executing simple dialog: audio sink '{}' not found", sink);
                     return;
@@ -459,14 +474,14 @@ public class Voice {
                 }
                 dialogContextBuilder.withLocale(loc);
             }
-            VoiceActionService.voiceManager.listenAndAnswer(dialogContextBuilder.build());
+            voiceManager.listenAndAnswer(dialogContextBuilder.build());
         } catch (IllegalStateException e) {
             logger.warn("Failed executing simple dialog: {}", e.getMessage());
         }
     }
 
     private static org.openhab.core.voice.@Nullable Voice getVoice(String id) {
-        return VoiceActionService.voiceManager.getAllVoices().stream().filter(voice -> voice.getUID().equals(id))
+        return Optional.ofNullable(VoiceActionService.voiceManager).map(VoiceManager::getAllVoices).orElse(Collections.emptySet()).stream().filter(voice -> voice.getUID().equals(id))
                 .findAny().orElse(null);
     }
 

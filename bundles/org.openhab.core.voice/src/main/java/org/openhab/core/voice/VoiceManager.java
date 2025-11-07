@@ -19,6 +19,7 @@ import java.util.Set;
 
 import org.eclipse.jdt.annotation.NonNullByDefault;
 import org.eclipse.jdt.annotation.Nullable;
+import org.openhab.core.audio.AudioFormat;
 import org.openhab.core.audio.AudioSource;
 import org.openhab.core.audio.AudioStream;
 import org.openhab.core.library.types.PercentType;
@@ -134,6 +135,97 @@ public interface VoiceManager {
      * @return a human language response
      */
     String interpret(String text, @Nullable String hliIdList) throws InterpretationException;
+
+    static @Nullable AudioFormat getBestMatch(Set<AudioFormat> inputs, Set<AudioFormat> outputs) {
+        AudioFormat preferredFormat = VoiceManager.getPreferredFormat(inputs);
+        for (AudioFormat output : outputs) {
+            if (output.isCompatible(preferredFormat)) {
+                return preferredFormat;
+            } else {
+                for (AudioFormat input : inputs) {
+                    if (output.isCompatible(input)) {
+                        return input;
+                    }
+                }
+            }
+        }
+        return null;
+    }
+
+    static @Nullable AudioFormat getPreferredFormat(Set<AudioFormat> audioFormats) {
+        // Return the first concrete AudioFormat found
+        for (AudioFormat currentAudioFormat : audioFormats) {
+            // Check if currentAudioFormat is abstract
+            if ((null == currentAudioFormat.getCodec()) || (null == currentAudioFormat.getContainer())
+                    || (null == currentAudioFormat.isBigEndian()) || (null == currentAudioFormat.getBitDepth())) {
+                continue;
+            }
+            // Prefer WAVE container
+            if ((null == currentAudioFormat.getBitRate()) || (null == currentAudioFormat.getFrequency())
+                    || !AudioFormat.CONTAINER_WAVE.equals(currentAudioFormat.getContainer())) {
+                continue;
+            }
+
+            // As currentAudioFormat is concrete, use it
+            return currentAudioFormat;
+        }
+
+        // There's no concrete AudioFormat so we must create one
+        for (AudioFormat currentAudioFormat : audioFormats) {
+            // Define AudioFormat to return
+            AudioFormat format = currentAudioFormat;
+
+            // Not all Codecs and containers can be supported
+            // Prefer WAVE container
+            if ((null == format.getCodec()) || (null == format.getContainer())
+                    || !AudioFormat.CONTAINER_WAVE.equals(format.getContainer())) {
+                continue;
+            }
+
+            // If required set BigEndian, BitDepth, BitRate, and Frequency to default values
+            if (null == format.isBigEndian()) {
+                format = new AudioFormat(format.getContainer(), format.getCodec(), Boolean.TRUE, format.getBitDepth(),
+                        format.getBitRate(), format.getFrequency());
+            }
+            if (null == format.getBitDepth() || null == format.getBitRate() || null == format.getFrequency()) {
+                // Define default values
+                int defaultBitDepth = 16;
+                long defaultFrequency = 44100;
+
+                // Obtain current values
+                Integer bitRate = format.getBitRate();
+                Long frequency = format.getFrequency();
+                Integer bitDepth = format.getBitDepth();
+
+                // These values must be interdependent (bitRate = bitDepth * frequency)
+                if (null == bitRate) {
+                    if (null == bitDepth) {
+                        bitDepth = defaultBitDepth;
+                    }
+                    if (null == frequency) {
+                        frequency = defaultFrequency;
+                    }
+                    bitRate = bitDepth * frequency.intValue();
+                } else if (null == bitDepth) {
+                    if (null == frequency) {
+                        frequency = defaultFrequency;
+                    }
+                    bitDepth = bitRate / frequency.intValue();
+                } else if (null == frequency) {
+                    frequency = bitRate.longValue() / bitDepth.longValue();
+                }
+
+                format = new AudioFormat(format.getContainer(), format.getCodec(), format.isBigEndian(), bitDepth,
+                        bitRate, frequency);
+            }
+
+            // Return preferred AudioFormat
+            return format;
+        }
+
+        // Return null indicating failure
+        return null;
+    }
 
     /**
      * Determines the preferred voice for the currently set locale
@@ -291,31 +383,31 @@ public interface VoiceManager {
     Collection<STTService> getSTTs();
 
     /**
-     * Retrieves a KS service.
+     * Retrieves a DTS service.
      * If a default name is configured and the service available, this is returned. Otherwise, the first available
      * service is returned.
      *
-     * @return a KS service or null, if no service is available or if a default is configured, but no according service
+     * @return a Dialog trigger service or null, if no service is available or if a default is configured, but no according service
      *         is found
      */
     @Nullable
-    KSService getKS();
+    DialogTriggerService getDTS();
 
     /**
-     * Retrieves a KS service with the given id.
+     * Retrieves a DTS service with the given id.
      *
      * @param id the id of the KS service
-     * @return a KS service or null, if no service with this id exists
+     * @return a dialog trigger service or null, if no service with this id exists
      */
     @Nullable
-    KSService getKS(@Nullable String id);
+    DialogTriggerService getDTS(@Nullable String id);
 
     /**
-     * Retrieves all KS services.
+     * Retrieves all dialog trigger services.
      *
      * @return a collection of KS services
      */
-    Collection<KSService> getKSs();
+    Collection<DialogTriggerService> getDTSs();
 
     /**
      * Retrieves a HumanLanguageInterpreter collection.
@@ -325,6 +417,15 @@ public interface VoiceManager {
      * @return a List<HumanLanguageInterpreter> or empty, if none of the services is available
      */
     List<HumanLanguageInterpreter> getHLIsByIds(@Nullable String ids);
+
+    /**
+     * Retrieves a dialog trigger service collection
+     * If no services are available returns an empty list.
+     *
+     * @param ids List of DTS service ids to use or null
+     * @return a List<DialogTriggerService> or empty, if none of the services is available
+     */
+    List<DialogTriggerService> getDTSsByIds(List<String> ids);
 
     /**
      * Retrieves a HumanLanguageInterpreter collection.

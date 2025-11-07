@@ -25,6 +25,7 @@ import org.eclipse.jdt.annotation.Nullable;
  */
 @NonNullByDefault
 public class DialogRegistration {
+
     /**
      * Dialog audio source id
      */
@@ -34,9 +35,9 @@ public class DialogRegistration {
      */
     public String sinkId;
     /**
-     * Preferred keyword-spotting service
+     * Preferred dialog-triggering service
      */
-    public @Nullable String ksId;
+    public List<String> dtsId = List.of();
     /**
      * Selected keyword for spotting
      */
@@ -81,6 +82,11 @@ public class DialogRegistration {
      * True if an associated dialog is running
      */
     public boolean running = false;
+
+    /**
+     * True if the dialog should be enabled.
+     */
+    public boolean enabled;
 
     public DialogRegistration(String sourceId, String sinkId) {
         this.sourceId = sourceId;

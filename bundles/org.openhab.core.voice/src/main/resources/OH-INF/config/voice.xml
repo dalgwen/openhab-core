@@ -21,9 +21,9 @@
 			<label>Default Human Language Interpreter</label>
 			<description>The default human language interpreter to use if no other is specified.</description>
 		</parameter>
-		<parameter name="defaultKS" type="text">
-			<label>Default Keyword Spotter</label>
-			<description>The default keyword spotting service to use if no other is specified.</description>
+		<parameter name="defaultDTS" type="text">
+			<label>Default Dialog Trigger Service</label>
+			<description>The default dialog trigger spotting service (mainly keyword spotter) to use if no other is specified.</description>
 		</parameter>
 		<parameter name="keyword" type="text">
 			<label>Magic Word</label>

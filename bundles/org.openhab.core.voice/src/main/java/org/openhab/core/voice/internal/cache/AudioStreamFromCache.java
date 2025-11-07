@@ -19,7 +19,10 @@ import org.eclipse.jdt.annotation.NonNullByDefault;
 import org.eclipse.jdt.annotation.Nullable;
 import org.openhab.core.audio.AudioException;
 import org.openhab.core.audio.AudioFormat;
+import org.openhab.core.audio.AudioStream;
+import org.openhab.core.audio.ClonableAudioStream;
 import org.openhab.core.audio.FixedLengthAudioStream;
+import org.openhab.core.audio.SizeableAudioStream;
 import org.openhab.core.cache.lru.InputStreamCacheWrapper;
 
 /**
@@ -28,7 +31,7 @@ import org.openhab.core.cache.lru.InputStreamCacheWrapper;
  * @author Gwendal Roulleau - Initial contribution
  */
 @NonNullByDefault
-public class AudioStreamFromCache extends FixedLengthAudioStream {
+public class AudioStreamFromCache extends AudioStream implements SizeableAudioStream, ClonableAudioStream {
 
     private InputStreamCacheWrapper inputStream;
     private AudioFormat audioFormat;

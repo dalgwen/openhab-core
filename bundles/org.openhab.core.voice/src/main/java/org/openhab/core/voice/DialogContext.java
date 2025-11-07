@@ -16,6 +16,7 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
 import java.util.Locale;
+import java.util.Set;
 
 import org.eclipse.jdt.annotation.NonNullByDefault;
 import org.eclipse.jdt.annotation.Nullable;
@@ -29,10 +30,10 @@ import org.openhab.core.voice.text.HumanLanguageInterpreter;
  * @author Miguel Álvarez - Initial contribution
  */
 @NonNullByDefault
-public record DialogContext(@Nullable KSService ks, @Nullable String keyword, STTService stt, TTSService tts,
-        @Nullable Voice voice, List<HumanLanguageInterpreter> hlis, AudioSource source, AudioSink sink, Locale locale,
-        String dialogGroup, @Nullable String locationItem, @Nullable String listeningItem,
-        @Nullable String listeningMelody) {
+public record DialogContext(Collection<DialogTriggerService> dts, @Nullable String keyword, STTService stt, TTSService tts,
+                            @Nullable Voice voice, List<HumanLanguageInterpreter> hlis, AudioSource source, AudioSink sink, Locale locale,
+                            String dialogGroup, @Nullable String locationItem, @Nullable String listeningItem,
+                            @Nullable String listeningMelody, boolean enabled) {
 
     /**
      * Builder for {@link DialogContext}
@@ -42,7 +43,7 @@ public record DialogContext(@Nullable KSService ks, @Nullable String keyword, ST
         // services
         private @Nullable AudioSource source;
         private @Nullable AudioSink sink;
-        private @Nullable KSService ks;
+        private @Nullable Collection<DialogTriggerService> dts;
         private @Nullable STTService stt;
         private @Nullable TTSService tts;
         private @Nullable Voice voice;
@@ -54,10 +55,16 @@ public record DialogContext(@Nullable KSService ks, @Nullable String keyword, ST
         private @Nullable String listeningMelody;
         private String keyword;
         private Locale locale;
+        private boolean enabled = true;
 
         public Builder(String keyword, Locale locale) {
             this.keyword = keyword;
             this.locale = locale;
+        }
+
+        public Builder withEnabled(boolean enabled) {
+            this.enabled = enabled;
+            return this;
         }
 
         public Builder withSource(@Nullable AudioSource source) {
@@ -70,9 +77,16 @@ public record DialogContext(@Nullable KSService ks, @Nullable String keyword, ST
             return this;
         }
 
-        public Builder withKS(@Nullable KSService service) {
+        public Builder withDTS(@Nullable DialogTriggerService service) {
             if (service != null) {
-                this.ks = service;
+                this.dts = Set.of(service);
+            }
+            return this;
+        }
+
+        public Builder withDTS(@Nullable Collection<DialogTriggerService> service) {
+            if (service != null) {
+                this.dts = service;
             }
             return this;
         }
@@ -165,7 +179,7 @@ public record DialogContext(@Nullable KSService ks, @Nullable String keyword, ST
          * @throws IllegalStateException if a required dialog component is missing
          */
         public DialogContext build() throws IllegalStateException {
-            KSService ksService = ks;
+            Collection<DialogTriggerService> dtService = dts == null ? Set.of() : dts;
             STTService sttService = stt;
             TTSService ttsService = tts;
             List<HumanLanguageInterpreter> hliServices = hlis;
@@ -191,8 +205,8 @@ public record DialogContext(@Nullable KSService ks, @Nullable String keyword, ST
                 }
                 throw new IllegalStateException("Cannot build dialog context: " + String.join(", ", errors) + ".");
             } else {
-                return new DialogContext(ksService, keyword, sttService, ttsService, voice, hliServices, audioSource,
-                        audioSink, locale, dialogGroup, locationItem, listeningItem, listeningMelody);
+                return new DialogContext(dtService, keyword, sttService, ttsService, voice, hliServices, audioSource,
+                        audioSink, locale, dialogGroup, locationItem, listeningItem, listeningMelody, enabled);
             }
         }
     }

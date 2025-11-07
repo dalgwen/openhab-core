@@ -15,21 +15,21 @@ package org.openhab.core.voice;
 import org.eclipse.jdt.annotation.NonNullByDefault;
 
 /**
- * The listener interface for receiving {@link KSEvent} events.
+ * The listener interface for receiving {@link DialogTriggerEvent} events.
  *
- * A class interested in processing {@link KSEvent} events implements this interface,
+ * A class interested in processing {@link DialogTriggerEvent} events implements this interface,
  * and its instances are passed to the {@code KSService}'s {@code spot()} method.
- * Such instances are then targeted for various {@link KSEvent} events corresponding
+ * Such instances are then targeted for various {@link DialogTriggerEvent} events corresponding
  * to the keyword spotting process.
  *
  * @author Kelly Davis - Initial contribution
  */
 @NonNullByDefault
-public interface KSListener {
+public interface DialogTriggerListener {
     /**
-     * Invoked when a {@link KSEvent} event occurs during keyword spotting.
+     * Invoked when a {@link DialogTriggerEvent} event occurs during keyword spotting.
      *
-     * @param ksEvent The {@link KSEvent} fired by the {@link KSService}
+     * @param dialogTriggerEvent The {@link DialogTriggerEvent} fired by the {@link KSService}
      */
-    void ksEventReceived(KSEvent ksEvent);
+    void dialogTriggerEventReceived(DialogTriggerEvent dialogTriggerEvent);
 }

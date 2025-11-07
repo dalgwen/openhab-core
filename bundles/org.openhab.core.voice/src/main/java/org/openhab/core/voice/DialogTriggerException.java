@@ -17,12 +17,12 @@ import java.io.Serial;
 import org.eclipse.jdt.annotation.NonNullByDefault;
 
 /**
- * General purpose keyword spotting exception
+ * General purpose dialog trigger exception
  *
  * @author Kelly Davis - Initial contribution
  */
 @NonNullByDefault
-public class KSException extends Exception {
+public class DialogTriggerException extends Exception {
 
     @Serial
     private static final long serialVersionUID = 1L;
@@ -30,7 +30,7 @@ public class KSException extends Exception {
     /**
      * Constructs a new exception with null as its detail message.
      */
-    public KSException() {
+    public DialogTriggerException() {
     }
 
     /**
@@ -39,7 +39,7 @@ public class KSException extends Exception {
      * @param message Detail message
      * @param cause The cause
      */
-    public KSException(String message, Throwable cause) {
+    public DialogTriggerException(String message, Throwable cause) {
         super(message, cause);
     }
 
@@ -48,7 +48,7 @@ public class KSException extends Exception {
      *
      * @param message Detail message
      */
-    public KSException(String message) {
+    public DialogTriggerException(String message) {
         super(message);
     }
 
@@ -57,7 +57,7 @@ public class KSException extends Exception {
      *
      * @param cause The cause
      */
-    public KSException(Throwable cause) {
+    public DialogTriggerException(Throwable cause) {
         super(cause);
     }
 }

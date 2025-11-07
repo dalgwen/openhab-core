@@ -41,7 +41,7 @@ import org.openhab.core.items.ItemNotUniqueException;
 import org.openhab.core.items.ItemRegistry;
 import org.openhab.core.voice.DialogContext;
 import org.openhab.core.voice.DialogRegistration;
-import org.openhab.core.voice.KSService;
+import org.openhab.core.voice.DialogTriggerService;
 import org.openhab.core.voice.STTService;
 import org.openhab.core.voice.TTSService;
 import org.openhab.core.voice.Voice;
@@ -251,7 +251,7 @@ public class VoiceConsoleCommandExtension extends AbstractConsoleCommandExtensio
                     return;
                 }
                 case SUBCMD_KEYWORD_SPOTTERS -> {
-                    listKeywordSpotters(console);
+                    listDialogTriggerSpotters(console);
                     return;
                 }
                 case SUBCMD_STT_SERVICES -> {
@@ -390,7 +390,8 @@ public class VoiceConsoleCommandExtension extends AbstractConsoleCommandExtensio
                 console.println(String.format(
                         " Source: %s - Sink: %s (STT: %s, TTS: %s, HLIs: %s, KS: %s, Keyword: %s, Dialog Group: %s)%s",
                         dr.sourceId, dr.sinkId, getOrDefault(dr.sttId), getOrDefault(dr.ttsId),
-                        dr.hliIds.isEmpty() ? getOrDefault(null) : String.join("->", dr.hliIds), getOrDefault(dr.ksId),
+                        dr.hliIds.isEmpty() ? getOrDefault(null) : String.join("->", dr.hliIds),
+                        dr.dtsId.isEmpty() ? getOrDefault(null) : String.join("->", dr.dtsId),
                         getOrDefault(dr.keyword), getOrDefault(dr.dialogGroup), locationText));
             });
         } else {
@@ -406,8 +407,8 @@ public class VoiceConsoleCommandExtension extends AbstractConsoleCommandExtensio
         Collection<DialogContext> dialogContexts = voiceManager.getDialogsContexts();
         if (!dialogContexts.isEmpty()) {
             dialogContexts.stream().sorted(comparing(s -> s.source().getId())).forEach(c -> {
-                var ks = c.ks();
-                String ksText = ks != null ? String.format(", KS: %s, Keyword: %s", ks.getId(), c.keyword()) : "";
+                var dts = c.dts();
+                String ksText = String.format(", DTS: %s, Optional Keyword: %s", dts.stream().map(DialogTriggerService::getId).collect(Collectors.joining(",")), c.keyword());
                 String locationText = c.locationItem() != null ? String.format(" Location: %s", c.locationItem()) : "";
                 console.println(String.format(
                         " Source: %s - Sink: %s (STT: %s, TTS: %s, HLIs: %s%s, Dialog Group: %s)%s", c.source().getId(),
@@ -434,14 +435,14 @@ public class VoiceConsoleCommandExtension extends AbstractConsoleCommandExtensio
         }
     }
 
-    private void listKeywordSpotters(Console console) {
-        Collection<KSService> spotters = voiceManager.getKSs();
+    private void listDialogTriggerSpotters(Console console) {
+        Collection<DialogTriggerService> spotters = voiceManager.getDTSs();
         if (!spotters.isEmpty()) {
-            KSService defaultKS = voiceManager.getKS();
+            DialogTriggerService defaultDTS = voiceManager.getDTS();
             Locale locale = localeProvider.getLocale();
             spotters.stream().sorted(comparing(s -> s.getLabel(locale))).forEach(ks -> {
                 console.println(
-                        String.format("%s %s (%s)", ks.equals(defaultKS) ? "*" : " ", ks.getLabel(locale), ks.getId()));
+                        String.format("%s %s (%s)", ks.equals(defaultDTS) ? "*" : " ", ks.getLabel(locale), ks.getId()));
             });
         } else {
             console.println("No keyword spotters found.");
@@ -527,7 +528,7 @@ public class VoiceConsoleCommandExtension extends AbstractConsoleCommandExtensio
                 .withTTS(voiceManager.getTTS(parameters.remove("tts"))) //
                 .withVoice(getVoice(parameters.remove("voice"))) //
                 .withHLIs(voiceManager.getHLIsByIds(parameters.remove("hlis"))) //
-                .withKS(voiceManager.getKS(parameters.remove("ks"))) //
+                .withDTS(voiceManager.getDTS(parameters.remove("dts"))) //
                 .withListeningItem(parameters.remove("listening-item")) //
                 .withLocationItem(parameters.remove("location-item")) //
                 .withDialogGroup(parameters.remove("dialog-group")) //
@@ -558,7 +559,7 @@ public class VoiceConsoleCommandExtension extends AbstractConsoleCommandExtensio
             throw new IllegalStateException("A sink is required if the default is not configured");
         }
         var dr = new DialogRegistration(sourceId, sinkId);
-        dr.ksId = parameters.remove("ks");
+        dr.dtsId = parameters.remove("ks");
         dr.keyword = parameters.remove("keyword");
         dr.sttId = parameters.remove("stt");
         dr.ttsId = parameters.remove("tts");
@@ -566,6 +567,12 @@ public class VoiceConsoleCommandExtension extends AbstractConsoleCommandExtensio
         dr.listeningItem = parameters.remove("listening-item");
         dr.locationItem = parameters.remove("location-item");
         dr.dialogGroup = parameters.remove("dialog-group");
+
+        @Nullable
+        String enabledS = parameters.remove("enabled");
+        if (enabledS != null) {
+            dr.enabled = Boolean.parseBoolean(enabledS);
+        }
 
         String hliIds = parameters.remove("hlis");
         if (hliIds != null) {

@@ -59,7 +59,7 @@ public class VoiceManagerImplTest extends JavaOSGiTest {
     private static final String CONFIG_DEFAULT_SINK = "defaultSink";
     private static final String CONFIG_DEFAULT_SOURCE = "defaultSource";
     private static final String CONFIG_DEFAULT_HLI = "defaultHLI";
-    private static final String CONFIG_DEFAULT_KS = "defaultKS";
+    private static final String CONFIG_DEFAULT_DTS = "defaultDTS";
     private static final String CONFIG_DEFAULT_STT = "defaultSTT";
     private static final String CONFIG_DEFAULT_VOICE = "defaultVoice";
     private static final String CONFIG_DEFAULT_TTS = "defaultTTS";
@@ -203,7 +203,7 @@ public class VoiceManagerImplTest extends JavaOSGiTest {
 
         assertThrows(IllegalStateException.class,
                 () -> voiceManager.startDialog(voiceManager.getDialogContextBuilder().withSource(source).withSink(sink)
-                        .withKS(ksService).withSTT(sttService).withTTS(null).withHLI(hliStub).withLocale(Locale.ENGLISH)
+                        .withDTS(ksService).withSTT(sttService).withTTS(null).withHLI(hliStub).withLocale(Locale.ENGLISH)
                         .withKeyword("word").build()));
 
         assertFalse(ksService.isWordSpotted());
@@ -223,7 +223,7 @@ public class VoiceManagerImplTest extends JavaOSGiTest {
 
         assertThrows(IllegalStateException.class,
                 () -> voiceManager.startDialog(voiceManager.getDialogContextBuilder().withSource(source).withSink(sink)
-                        .withKS(ksService).withSTT(sttService).withTTS(ttsService).withHLI(hliStub)
+                        .withDTS(ksService).withSTT(sttService).withTTS(ttsService).withHLI(hliStub)
                         .withLocale(Locale.FRENCH).withKeyword("mot").build()));
 
         assertFalse(ksService.isWordSpotted());
@@ -242,7 +242,7 @@ public class VoiceManagerImplTest extends JavaOSGiTest {
         registerService(hliStub);
 
         voiceManager.startDialog(voiceManager.getDialogContextBuilder().withSource(source).withSink(sink)
-                .withKS(ksService).withSTT(sttService).withTTS(ttsService).withHLI(hliStub).withLocale(Locale.ENGLISH)
+                .withDTS(ksService).withSTT(sttService).withTTS(ttsService).withHLI(hliStub).withLocale(Locale.ENGLISH)
                 .withKeyword("word").build());
 
         assertTrue(ksService.isWordSpotted());
@@ -271,7 +271,7 @@ public class VoiceManagerImplTest extends JavaOSGiTest {
         ksService.setExceptionExpected(true);
 
         voiceManager.startDialog(voiceManager.getDialogContextBuilder().withSource(source).withSink(sink)
-                .withKS(ksService).withSTT(sttService).withTTS(ttsService).withHLI(hliStub).withLocale(Locale.ENGLISH)
+                .withDTS(ksService).withSTT(sttService).withTTS(ttsService).withHLI(hliStub).withLocale(Locale.ENGLISH)
                 .withKeyword("word").build());
 
         assertFalse(ksService.isWordSpotted());
@@ -298,7 +298,7 @@ public class VoiceManagerImplTest extends JavaOSGiTest {
         ksService.setErrorExpected(true);
 
         voiceManager.startDialog(voiceManager.getDialogContextBuilder().withSource(source).withSink(sink)
-                .withKS(ksService).withSTT(sttService).withTTS(ttsService).withHLI(hliStub).withLocale(Locale.ENGLISH)
+                .withDTS(ksService).withSTT(sttService).withTTS(ttsService).withHLI(hliStub).withLocale(Locale.ENGLISH)
                 .withKeyword("word").build());
 
         assertFalse(ksService.isWordSpotted());
@@ -326,7 +326,7 @@ public class VoiceManagerImplTest extends JavaOSGiTest {
         sttService.setExceptionExpected(true);
 
         voiceManager.startDialog(voiceManager.getDialogContextBuilder().withSource(source).withSink(sink)
-                .withKS(ksService).withSTT(sttService).withTTS(ttsService).withHLI(hliStub).withLocale(Locale.ENGLISH)
+                .withDTS(ksService).withSTT(sttService).withTTS(ttsService).withHLI(hliStub).withLocale(Locale.ENGLISH)
                 .withKeyword("word").build());
 
         assertTrue(ksService.isWordSpotted());
@@ -353,7 +353,7 @@ public class VoiceManagerImplTest extends JavaOSGiTest {
         sttService.setErrorExpected(true);
 
         voiceManager.startDialog(voiceManager.getDialogContextBuilder().withSource(source).withSink(sink)
-                .withKS(ksService).withSTT(sttService).withTTS(ttsService).withHLI(hliStub).withLocale(Locale.ENGLISH)
+                .withDTS(ksService).withSTT(sttService).withTTS(ttsService).withHLI(hliStub).withLocale(Locale.ENGLISH)
                 .withKeyword("word").build());
 
         assertTrue(ksService.isWordSpotted());
@@ -380,7 +380,7 @@ public class VoiceManagerImplTest extends JavaOSGiTest {
         hliStub.setExceptionExpected(true);
 
         voiceManager.startDialog(voiceManager.getDialogContextBuilder().withSource(source).withSink(sink)
-                .withKS(ksService).withSTT(sttService).withTTS(ttsService).withHLI(hliStub).withLocale(Locale.ENGLISH)
+                .withDTS(ksService).withSTT(sttService).withTTS(ttsService).withHLI(hliStub).withLocale(Locale.ENGLISH)
                 .withKeyword("word").build());
 
         assertTrue(ksService.isWordSpotted());
@@ -407,7 +407,7 @@ public class VoiceManagerImplTest extends JavaOSGiTest {
         Dictionary<String, Object> config = new Hashtable<>();
         config.put(CONFIG_KEYWORD, "word");
         config.put(CONFIG_DEFAULT_STT, sttService.getId());
-        config.put(CONFIG_DEFAULT_KS, ksService.getId());
+        config.put(CONFIG_DEFAULT_DTS, ksService.getId());
         config.put(CONFIG_DEFAULT_HLI, hliStub.getId());
         config.put(CONFIG_DEFAULT_VOICE, voice.getUID());
 
@@ -446,14 +446,14 @@ public class VoiceManagerImplTest extends JavaOSGiTest {
         registerService(hliStub);
 
         voiceManager.startDialog(voiceManager.getDialogContextBuilder().withSource(source).withSink(sink)
-                .withKS(ksService).withSTT(sttService).withTTS(ttsService).withHLI(hliStub).withLocale(Locale.ENGLISH)
+                .withDTS(ksService).withSTT(sttService).withTTS(ttsService).withHLI(hliStub).withLocale(Locale.ENGLISH)
                 .withKeyword("word").build());
 
         assertTrue(ksService.isWordSpotted());
 
         assertThrows(IllegalStateException.class,
                 () -> voiceManager.startDialog(voiceManager.getDialogContextBuilder().withSource(source).withSink(sink)
-                        .withKS(ksService).withSTT(sttService).withTTS(ttsService).withHLI(hliStub)
+                        .withDTS(ksService).withSTT(sttService).withTTS(ttsService).withHLI(hliStub)
                         .withLocale(Locale.ENGLISH).withKeyword("word").build()));
 
         voiceManager.stopDialog(source);
@@ -495,7 +495,7 @@ public class VoiceManagerImplTest extends JavaOSGiTest {
 
         boolean isKSStubInTheOptions = false;
 
-        Collection<ParameterOption> options = voiceManager.getParameterOptions(VOICE_CONFIG_URI, "defaultKS", null,
+        Collection<ParameterOption> options = voiceManager.getParameterOptions(VOICE_CONFIG_URI, "defaultDTS", null,
                 null);
 
         assertNotNull(options);
@@ -617,7 +617,7 @@ public class VoiceManagerImplTest extends JavaOSGiTest {
         Dictionary<String, Object> config = new Hashtable<>();
         config.put(CONFIG_KEYWORD, "word");
         config.put(CONFIG_DEFAULT_STT, sttService.getId());
-        config.put(CONFIG_DEFAULT_KS, ksService.getId());
+        config.put(CONFIG_DEFAULT_DTS, ksService.getId());
         config.put(CONFIG_DEFAULT_HLI, hliStub.getId());
         config.put(CONFIG_DEFAULT_VOICE, voice.getUID());
         ConfigurationAdmin configAdmin = super.getService(ConfigurationAdmin.class);

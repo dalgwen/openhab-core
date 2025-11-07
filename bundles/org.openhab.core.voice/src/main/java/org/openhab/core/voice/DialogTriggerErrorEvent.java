@@ -15,12 +15,12 @@ package org.openhab.core.voice;
 import org.eclipse.jdt.annotation.NonNullByDefault;
 
 /**
- * A {@link KSEvent} fired when the {@link KSService} encounters an error.
+ * A {@link DialogTriggerEvent} fired when the {@link KSService} encounters an error.
  *
  * @author Kelly Davis - Initial contribution
  */
 @NonNullByDefault
-public class KSErrorEvent implements KSEvent {
+public class DialogTriggerErrorEvent implements DialogTriggerEvent {
     /**
      * The message describing the error
      */
@@ -31,7 +31,7 @@ public class KSErrorEvent implements KSEvent {
      *
      * @param message The message describing the error
      */
-    public KSErrorEvent(String message) {
+    public DialogTriggerErrorEvent(String message) {
         this.message = message;
     }
 

@@ -14,6 +14,8 @@ package org.openhab.core.voice.internal;
 
 import java.io.IOException;
 import java.text.ParseException;
+import java.util.ArrayList;
+import java.util.Collection;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Objects;
@@ -34,14 +36,13 @@ import org.openhab.core.items.ItemUtil;
 import org.openhab.core.items.events.ItemEventFactory;
 import org.openhab.core.library.types.OnOffType;
 import org.openhab.core.voice.DialogContext;
-import org.openhab.core.voice.KSEdgeService;
-import org.openhab.core.voice.KSErrorEvent;
-import org.openhab.core.voice.KSEvent;
-import org.openhab.core.voice.KSException;
-import org.openhab.core.voice.KSListener;
-import org.openhab.core.voice.KSService;
-import org.openhab.core.voice.KSServiceHandle;
-import org.openhab.core.voice.KSpottedEvent;
+import org.openhab.core.voice.DialogTriggerErrorEvent;
+import org.openhab.core.voice.DialogTriggerEvent;
+import org.openhab.core.voice.DialogTriggerService;
+import org.openhab.core.voice.DialogTriggerException;
+import org.openhab.core.voice.DialogTriggerListener;
+import org.openhab.core.voice.DialogTriggerServiceHandle;
+import org.openhab.core.voice.DialogTriggeredEvent;
 import org.openhab.core.voice.RecognitionStartEvent;
 import org.openhab.core.voice.RecognitionStopEvent;
 import org.openhab.core.voice.STTEvent;
@@ -52,6 +53,7 @@ import org.openhab.core.voice.SpeechRecognitionErrorEvent;
 import org.openhab.core.voice.SpeechRecognitionEvent;
 import org.openhab.core.voice.TTSException;
 import org.openhab.core.voice.Voice;
+import org.openhab.core.voice.VoiceManager;
 import org.openhab.core.voice.text.HumanLanguageInterpreter;
 import org.openhab.core.voice.text.InterpretationException;
 import org.osgi.framework.Bundle;
@@ -74,7 +76,7 @@ import org.slf4j.LoggerFactory;
  *
  */
 @NonNullByDefault
-public class DialogProcessor implements KSListener, STTListener {
+public class DialogProcessor implements DialogTriggerListener, STTListener {
     private final Logger logger = LoggerFactory.getLogger(DialogProcessor.class);
     private final WeakHashMap<String, DialogContext> activeDialogGroups;
     public final DialogContext dialogContext;
@@ -83,7 +85,6 @@ public class DialogProcessor implements KSListener, STTListener {
     private final TranslationProvider i18nProvider;
     private final Bundle bundle;
 
-    private final @Nullable AudioFormat ksFormat;
     private final @Nullable AudioFormat sttFormat;
     private final @Nullable AudioFormat ttsFormat;
     private final DialogEventListener eventListener;
@@ -98,7 +99,7 @@ public class DialogProcessor implements KSListener, STTListener {
      */
     private boolean isSTTServerAborting = false;
 
-    private @Nullable KSServiceHandle ksServiceHandle;
+    private final List<DialogTriggerServiceHandle> dtServiceHandles = new ArrayList<>();
     private @Nullable STTServiceHandle sttServiceHandle;
 
     private @Nullable AudioStream streamKS;
@@ -113,13 +114,9 @@ public class DialogProcessor implements KSListener, STTListener {
         this.i18nProvider = i18nProvider;
         this.activeDialogGroups = activeDialogGroups;
         this.bundle = bundle;
-        var ks = context.ks();
-        this.ksFormat = ks != null
-                ? VoiceManagerImpl.getBestMatch(context.source().getSupportedFormats(), ks.getSupportedFormats())
-                : null;
-        this.sttFormat = VoiceManagerImpl.getBestMatch(context.source().getSupportedFormats(),
+        this.sttFormat = VoiceManager.getBestMatch(context.source().getSupportedFormats(),
                 context.stt().getSupportedFormats());
-        this.ttsFormat = VoiceManagerImpl.getBestMatch(context.tts().getSupportedFormats(),
+        this.ttsFormat = VoiceManager.getBestMatch(context.tts().getSupportedFormats(),
                 context.sink().getSupportedFormats());
         initToneSynthesizer(context.listeningMelody());
     }
@@ -131,7 +128,7 @@ public class DialogProcessor implements KSListener, STTListener {
         if (listeningMelodyText != null && !listeningMelodyText.isBlank()) {
             try {
                 listeningMelody = ToneSynthesizer.parseMelody(listeningMelodyText);
-                var synthesizerFormat = VoiceManagerImpl.getBestMatch(ToneSynthesizer.getSupportedFormats(),
+                var synthesizerFormat = VoiceManager.getBestMatch(ToneSynthesizer.getSupportedFormats(),
                         dialogContext.sink().getSupportedFormats());
                 if (synthesizerFormat != null) {
                     toneSynthesizer = new ToneSynthesizer(synthesizerFormat);
@@ -153,34 +150,20 @@ public class DialogProcessor implements KSListener, STTListener {
      * @throws IllegalStateException if keyword spot service is misconfigured
      */
     public void start() throws IllegalStateException {
-        KSService ksService = dialogContext.ks();
+        Collection<DialogTriggerService> triggerServices = dialogContext.dts();
         String keyword = dialogContext.keyword();
-        if (ksService != null && keyword != null) {
-            abortKS();
-            closeStreamKS();
-            AudioFormat fmt = ksFormat;
-            if (fmt == null) {
-                logger.warn("No compatible audio format found for ks '{}' and source '{}'", ksService.getId(),
-                        dialogContext.source().getId());
-                return;
-            }
-            try {
-                if (ksService instanceof KSEdgeService service) {
-                    service.spot(this);
-                } else {
-                    AudioStream stream = dialogContext.source().getInputStream(fmt);
-                    streamKS = stream;
-                    ksServiceHandle = ksService.spot(this, stream, dialogContext.locale(), keyword);
+        if (! triggerServices.isEmpty() && keyword != null) {
+            abortDTS();
+            for( DialogTriggerService triggerService : triggerServices ) {
+                try {
+                    dtServiceHandles.add(triggerService.spot(this, dialogContext));
+                } catch (DialogTriggerException e) {
+                    logger.warn("Encountered error calling spot: {}", e.getMessage());
                 }
-                playStartSound();
-            } catch (AudioException e) {
-                logger.warn("Encountered audio error: {}", e.getMessage());
-            } catch (KSException e) {
-                logger.warn("Encountered error calling spot: {}", e.getMessage());
-                closeStreamKS();
             }
+            playStartSound();
         } else {
-            throw new IllegalStateException("Unable to run persistent dialog ks service is not configured");
+            throw new IllegalStateException("Unable to run persistent dialog, trigger service is not configured");
         }
     }
 
@@ -236,8 +219,7 @@ public class DialogProcessor implements KSListener, STTListener {
     public void stop() {
         abortSTT();
         closeStreamSTT();
-        abortKS();
-        closeStreamKS();
+        abortDTS();
         toggleProcessing(false);
         playStopSound();
         eventListener.onDialogStopped(dialogContext);
@@ -257,24 +239,13 @@ public class DialogProcessor implements KSListener, STTListener {
         return processing;
     }
 
-    private void abortKS() {
-        KSServiceHandle handle = ksServiceHandle;
-        if (handle != null) {
-            handle.abort();
-            ksServiceHandle = null;
-        }
-    }
-
-    private void closeStreamKS() {
-        AudioStream stream = streamKS;
-        if (stream != null) {
-            try {
-                stream.close();
-            } catch (IOException e) {
-                logger.debug("IOException closing ks audio stream: {}", e.getMessage(), e);
+    private void abortDTS() {
+        for(DialogTriggerServiceHandle handle : dtServiceHandles) {
+            if (handle != null) {
+                handle.abort();
             }
-            streamKS = null;
         }
+        dtServiceHandles.clear();
     }
 
     private void abortSTT() {
@@ -314,17 +285,17 @@ public class DialogProcessor implements KSListener, STTListener {
     }
 
     @Override
-    public void ksEventReceived(KSEvent ksEvent) {
+    public void dialogTriggerEventReceived(DialogTriggerEvent dialogTriggerEvent) {
         isSTTServerAborting = false;
-        if (ksEvent instanceof KSpottedEvent) {
-            logger.debug("KSpottedEvent event received");
+        if (dialogTriggerEvent instanceof DialogTriggeredEvent) {
+            logger.debug("DialogTriggeredEvent event received");
             try {
                 startSimpleDialog();
             } catch (IllegalStateException e) {
                 logger.warn("{}", e.getMessage());
             }
-        } else if (ksEvent instanceof KSErrorEvent kse) {
-            logger.debug("KSErrorEvent event received");
+        } else if (dialogTriggerEvent instanceof DialogTriggerErrorEvent kse) {
+            logger.debug("DialogTriggerErrorEvent event received");
             String text = i18nProvider.getText(bundle, "error.ks-error", null, dialogContext.locale());
             say(text == null ? kse.getMessage() : text.replace("{0}", kse.getMessage()));
         }
